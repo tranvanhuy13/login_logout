@@ -1,0 +1,197 @@
+"""
+main.py - runs the API with authentication.py + authorization.py.
+
+    python main.py          ->  http://localhost:8000
+
+Every route below is protected with the capability from the permission table, so you can log in
+as viewer / operator / admin and see which calls succeed (200) and which are refused (403).
+The camera / alert data is fake on purpose - replace the bodies with your real code later.
+"""
+import os
+
+import uvicorn
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from contextlib import asynccontextmanager
+
+import authentication
+import authorization
+from authentication import get_current_user
+from authorization import Capability as C
+from authorization import ensure_can_change_setting, require_capability
+
+load_dotenv()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ----------------------------------------------------------------------------- test conveniences
+if not (os.getenv("GMAIL_ADDRESS") and os.getenv("GMAIL_APP_PASSWORD")):
+    authentication.DEV_MODE = True   # print OTP codes in this terminal instead of e-mailing them
+    print("[main] Gmail not configured -> DEV MODE: OTP codes are printed here.")
+
+if not os.getenv("ADMIN_USERNAME"):
+    os.environ["ADMIN_USERNAME"] = "admin1"
+    os.environ["ADMIN_PASSWORD"] = "Admin12345"
+    os.environ["ADMIN_EMAIL"] = "admin@gmail.com"
+    print("[main] No ADMIN_* set -> test admin: admin1 / Admin12345  (do not use in production)")
+
+
+# ----------------------------------------------------------------------------- app
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    authentication.init_auth_db()   # creates the tables in users.db (+ first admin)
+    yield
+
+
+app = FastAPI(title="Fire Guard API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:8000",
+                   "http://127.0.0.1:3000", "http://127.0.0.1:8000"],
+    allow_credentials=True,   # needed for the login cookie
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(authentication.router)   # /auth/register, /auth/verify-otp, /auth/login, ...
+app.include_router(authorization.router)    # /auth/me, /admin/users, /admin/audit-log
+
+
+@app.get("/")
+def index():
+    page = os.path.join(BASE_DIR, "auth.html")
+    if os.path.exists(page):
+        return FileResponse(page)
+    return {"status": "ok", "message": "Fire Guard API is running"}
+
+
+# ----------------------------------------------------------------------------- fake data
+CAMERAS = {1: {"id": 1, "name": "Camera 1", "is_active": True}}
+ALERTS = [{"id": 1, "type": "fire", "confidence": 0.91, "acknowledged": False, "false_alarm": False}]
+SETTINGS = {
+    "ai_confidence_threshold": "0.25", "ai_persistence_frames": "2", "ai_cooldown_seconds": "5",
+    "zalo_enabled": "false", "zalo_bot_token": "", "zalo_chat_id": "", "public_base_url": "",
+    "telegram_enabled": "false", "telegram_bot_token": "", "telegram_chat_id": "",
+    "alarm_sound_enabled": "true",
+}
+SECRET_KEYS = {"zalo_bot_token", "telegram_bot_token"}
+
+
+class CameraBody(BaseModel):
+    name: str
+    source: str
+
+
+class SettingBody(BaseModel):
+    key: str
+    value: str
+
+
+# ----------------------------------------------------------------------------- Viewer and up
+@app.get("/cameras")                                   # Live streams and camera status
+def list_cameras(user=Depends(require_capability(C.VIEW_STREAMS))):
+    return {"cameras": list(CAMERAS.values())}
+
+
+@app.get("/alerts")                                    # Real-time alerts
+def list_alerts(user=Depends(require_capability(C.VIEW_ALERTS))):
+    return {"alerts": ALERTS}
+
+
+@app.get("/history")                                   # History
+def history(user=Depends(require_capability(C.VIEW_ALERTS))):
+    return {"events": ALERTS}
+
+
+@app.get("/stats")                                     # Stats
+def stats(user=Depends(require_capability(C.VIEW_ALERTS))):
+    return {"stats": [{"date": "2026-10-10", "count": len(ALERTS)}]}
+
+
+@app.get("/settings")                                  # any logged-in user may read (secrets masked)
+def get_settings(user=Depends(get_current_user)):
+    return {"settings": {k: ("********" if k in SECRET_KEYS and v else v) for k, v in SETTINGS.items()}}
+
+
+# "Mute or unmute the alarm sound (own browser only)" needs no endpoint: keep it in the browser
+# (localStorage). Every role has the MUTE_ALARM capability.
+
+
+# ----------------------------------------------------------------------------- Operator and up
+@app.post("/alerts/{alert_id}/ack")                    # Acknowledge alerts
+def acknowledge_alert(alert_id: int, user=Depends(require_capability(C.ACK_ALERTS))):
+    return _mark(alert_id, "acknowledged", user)
+
+
+@app.post("/alerts/{alert_id}/false-alarm")            # Mark false alarm
+def false_alarm(alert_id: int, user=Depends(require_capability(C.ACK_ALERTS))):
+    return _mark(alert_id, "false_alarm", user)
+
+
+def _mark(alert_id, field, user):
+    for a in ALERTS:
+        if a["id"] == alert_id:
+            a[field] = True
+            a["by"] = user["username"]
+            return {"status": "ok", "alert": a}
+    return {"status": "error", "message": "Alert not found"}
+
+
+@app.post("/cameras/{camera_id}/toggle")               # Turn a camera on/off
+def toggle_camera(camera_id: int, active: bool, user=Depends(require_capability(C.TOGGLE_CAMERA))):
+    cam = CAMERAS.get(camera_id)
+    if cam is None:
+        return {"status": "error", "message": "Camera not found"}
+    cam["is_active"] = active
+    return {"status": "ok", "camera": cam}
+
+
+@app.post("/video-analysis")                           # Analyze uploaded video (stub, no upload yet)
+def analyze_video(user=Depends(require_capability(C.ANALYZE_VIDEO))):
+    return {"status": "ok", "message": "Video analysis would start here"}
+
+
+@app.post("/test-notification")                        # Send a test notification
+def test_notification(user=Depends(require_capability(C.SEND_TEST_NOTIFICATION))):
+    return {"status": "ok", "message": "Test notification would be sent here"}
+
+
+# ----------------------------------------------------------------------------- Admin only
+@app.post("/cameras")                                  # Add cameras
+def add_camera(cam: CameraBody, user=Depends(require_capability(C.MANAGE_CAMERAS))):
+    new_id = max(CAMERAS, default=0) + 1
+    CAMERAS[new_id] = {"id": new_id, "name": cam.name, "source": cam.source, "is_active": True}
+    return {"status": "ok", "id": new_id}
+
+
+@app.put("/cameras/{camera_id}")                       # Edit cameras
+def edit_camera(camera_id: int, cam: CameraBody, user=Depends(require_capability(C.MANAGE_CAMERAS))):
+    if camera_id not in CAMERAS:
+        return {"status": "error", "message": "Camera not found"}
+    CAMERAS[camera_id].update(name=cam.name, source=cam.source)
+    return {"status": "ok", "camera": CAMERAS[camera_id]}
+
+
+@app.delete("/cameras/{camera_id}")                    # Delete cameras
+def delete_camera(camera_id: int, user=Depends(require_capability(C.MANAGE_CAMERAS))):
+    CAMERAS.pop(camera_id, None)
+    return {"status": "ok"}
+
+
+@app.post("/settings")   # AI settings -> admin; Zalo/Telegram settings -> admin; mute -> everyone
+def save_setting(setting: SettingBody, user=Depends(get_current_user)):
+    ensure_can_change_setting(user, setting.key)       # raises 403 / 400 if not allowed
+    SETTINGS[setting.key] = setting.value
+    return {"status": "ok", "message": "Setting saved"}
+
+
+# Manage users and roles -> /admin/users ...  and  View the audit log -> /admin/audit-log
+# (both already provided by authorization.router)
+
+
+if __name__ == "__main__":
+    print("[main] Open http://localhost:8000  (use 'localhost', not 127.0.0.1)")
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
