@@ -172,7 +172,7 @@ def delete_user(user_id: int, admin: dict = Depends(require_capability(Capabilit
         target = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
         if target is None:
             raise HTTPException(status_code=404, detail="User not found.")
-        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))  # sessions/OTP cascade
+        conn.execute("DELETE FROM users WHERE id = ?", (user_id,))  # OTP / reset codes cascade
 
     audit("user_deleted", admin["username"], target["username"])
     return {"status": "ok", "message": "User deleted"}

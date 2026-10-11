@@ -1,694 +1,389 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="vi">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Fire Guard - Đăng nhập</title>
-    <style>
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #000;
-        color: #e5e7eb;
-        font-family:
-          system-ui,
-          -apple-system,
-          "Segoe UI",
-          sans-serif;
-        padding: 16px;
-      }
-      .card {
-        width: 100%;
-        max-width: 420px;
-        background: #0a0a0a;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        overflow: hidden;
-      }
-      .tabs {
-        display: flex;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-      }
-      .tabs button {
-        flex: 1;
-        padding: 12px 4px;
-        background: none;
-        border: 0;
-        border-bottom: 2px solid transparent;
-        color: #9ca3af;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-      }
-      .tabs button:hover {
-        color: #fff;
-      }
-      .tabs button.active {
-        color: #fff;
-        background: rgba(255, 255, 255, 0.05);
-        border-bottom-color: #3b82f6;
-      }
-      .body {
-        padding: 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 14px;
-      }
-      label {
-        display: block;
-        font-size: 12px;
-        color: #9ca3af;
-        font-weight: 500;
-        margin-bottom: 6px;
-      }
-      input {
-        width: 100%;
-        padding: 9px 12px;
-        background: rgba(0, 0, 0, 0.3);
-        color: #fff;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 6px;
-        font-size: 14px;
-        outline: none;
-      }
-      input:focus {
-        border-color: #3b82f6;
-      }
-      .hint {
-        font-size: 11px;
-        color: #6b7280;
-        margin: 5px 0 0;
-      }
-      .btn {
-        width: 100%;
-        padding: 10px;
-        border: 0;
-        border-radius: 6px;
-        font-size: 14px;
-        font-weight: 600;
-        background: #fff;
-        color: #000;
-        cursor: pointer;
-      }
-      .btn:hover {
-        background: #e5e7eb;
-      }
-      .btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      .btn.secondary {
-        background: #1f2937;
-        color: #fff;
-      }
-      .btn.secondary:hover {
-        background: #374151;
-      }
-      .link {
-        background: none;
-        color: #60a5fa;
-        font-weight: 500;
-      }
-      .link:hover {
-        background: none;
-        color: #93c5fd;
-      }
-      .link:disabled {
-        color: #4b5563;
-      }
-      .msg {
-        padding: 10px 12px;
-        border-radius: 6px;
-        font-size: 13px;
-        display: none;
-      }
-      .msg.show {
-        display: block;
-      }
-      .msg.error {
-        background: rgba(239, 68, 68, 0.12);
-        color: #f87171;
-      }
-      .msg.ok {
-        background: rgba(34, 197, 94, 0.12);
-        color: #4ade80;
-      }
-      .otp {
-        text-align: center;
-        letter-spacing: 0.5em;
-        font-family: ui-monospace, Consolas, monospace;
-        font-size: 20px;
-      }
-      .hidden {
-        display: none !important;
-      }
-      .who {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 12px;
-      }
-      .who h2 {
-        margin: 0;
-        font-size: 18px;
-        color: #fff;
-      }
-      .who p {
-        margin: 3px 0 0;
-        font-size: 12px;
-        color: #6b7280;
-      }
-      .badge {
-        padding: 3px 10px;
-        border-radius: 999px;
-        font-size: 12px;
-        font-weight: 500;
-        border: 1px solid;
-      }
-      .badge.viewer {
-        background: rgba(107, 114, 128, 0.15);
-        color: #d1d5db;
-        border-color: rgba(107, 114, 128, 0.4);
-      }
-      .badge.operator {
-        background: rgba(245, 158, 11, 0.15);
-        color: #fbbf24;
-        border-color: rgba(245, 158, 11, 0.4);
-      }
-      .badge.admin {
-        background: rgba(239, 68, 68, 0.15);
-        color: #f87171;
-        border-color: rgba(239, 68, 68, 0.4);
-      }
-      .caps h3 {
-        margin: 0 0 8px;
-        font-size: 12px;
-        color: #9ca3af;
-        font-weight: 500;
-      }
-      .caps ul {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: grid;
-        gap: 4px;
-      }
-      .caps li {
-        font-size: 14px;
-        color: #d1d5db;
-      }
-      .caps li::before {
-        content: "\2713";
-        color: #4ade80;
-        margin-right: 8px;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="card">
-      <!-- ================= Chưa đăng nhập ================= -->
-      <div id="guest">
-        <div class="tabs">
-          <button data-tab="login" class="active">Đăng nhập</button>
-          <button data-tab="register">Tạo tài khoản</button>
-          <button data-tab="verify">Nhập mã OTP</button>
-        </div>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fire Guard - Đăng nhập</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #000; color: #e5e7eb; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 16px;
+  }
+  .card {
+    width: 100%; max-width: 420px; background: #0a0a0a;
+    border: 1px solid rgba(255,255,255,.1); border-radius: 16px; overflow: hidden;
+  }
+  .tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .tabs button {
+    flex: 1; padding: 12px 4px; background: none; border: 0; border-bottom: 2px solid transparent;
+    color: #9ca3af; font-size: 14px; font-weight: 500; cursor: pointer;
+  }
+  .tabs button:hover { color: #fff; }
+  .tabs button.active { color: #fff; background: rgba(255,255,255,.05); border-bottom-color: #3b82f6; }
+  .body { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+  label { display: block; font-size: 12px; color: #9ca3af; font-weight: 500; margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 9px 12px; background: rgba(0,0,0,.3); color: #fff;
+    border: 1px solid rgba(255,255,255,.12); border-radius: 6px; font-size: 14px; outline: none;
+  }
+  input:focus { border-color: #3b82f6; }
+  .hint { font-size: 11px; color: #6b7280; margin: 5px 0 0; }
+  .btn {
+    width: 100%; padding: 10px; border: 0; border-radius: 6px; font-size: 14px; font-weight: 600;
+    background: #fff; color: #000; cursor: pointer;
+  }
+  .btn:hover { background: #e5e7eb; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.secondary { background: #1f2937; color: #fff; }
+  .btn.secondary:hover { background: #374151; }
+  .link { background: none; color: #60a5fa; font-weight: 500; }
+  .link:hover { background: none; color: #93c5fd; }
+  .link:disabled { color: #4b5563; }
+  .msg { padding: 10px 12px; border-radius: 6px; font-size: 13px; display: none; }
+  .msg.show { display: block; }
+  .msg.error { background: rgba(239,68,68,.12); color: #f87171; }
+  .msg.ok { background: rgba(34,197,94,.12); color: #4ade80; }
+  .otp { text-align: center; letter-spacing: .5em; font-family: ui-monospace, Consolas, monospace; font-size: 20px; }
+  .hidden { display: none !important; }
+  .who { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .who h2 { margin: 0; font-size: 18px; color: #fff; }
+  .who p { margin: 3px 0 0; font-size: 12px; color: #6b7280; }
+  .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; border: 1px solid; }
+  .badge.viewer   { background: rgba(107,114,128,.15); color: #d1d5db; border-color: rgba(107,114,128,.4); }
+  .badge.operator { background: rgba(245,158,11,.15);  color: #fbbf24; border-color: rgba(245,158,11,.4); }
+  .badge.admin    { background: rgba(239,68,68,.15);   color: #f87171; border-color: rgba(239,68,68,.4); }
+  .caps h3 { margin: 0 0 8px; font-size: 12px; color: #9ca3af; font-weight: 500; }
+  .caps ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .caps li { font-size: 14px; color: #d1d5db; }
+  .caps li::before { content: "\2713"; color: #4ade80; margin-right: 8px; }
+</style>
+</head>
+<body>
 
-        <div class="body">
-          <div id="error" class="msg error"></div>
-          <div id="info" class="msg ok"></div>
+<div class="card">
 
-          <!-- Đăng nhập -->
-          <div id="tab-login" class="body" style="padding: 0">
-            <div>
-              <label>Tên đăng nhập</label
-              ><input id="l-user" autocomplete="username" />
-            </div>
-            <div>
-              <label>Mật khẩu</label
-              ><input
-                id="l-pass"
-                type="password"
-                autocomplete="current-password"
-              />
-            </div>
-            <button class="btn" id="btn-login">Đăng nhập</button>
-            <button class="btn link" id="btn-to-forgot">Quên mật khẩu?</button>
-          </div>
-
-          <!-- Quên mật khẩu -->
-          <div id="tab-forgot" class="body hidden" style="padding: 0">
-            <div>
-              <label>Địa chỉ Gmail của tài khoản</label>
-              <input
-                id="f-email"
-                type="email"
-                placeholder="ten@gmail.com"
-                autocomplete="email"
-              />
-            </div>
-            <button class="btn secondary" id="btn-forgot-send">
-              Gửi mã đặt lại mật khẩu
-            </button>
-            <div>
-              <label>Mã gồm 6 chữ số</label>
-              <input
-                id="f-otp"
-                class="otp"
-                maxlength="6"
-                inputmode="numeric"
-                autocomplete="one-time-code"
-              />
-            </div>
-            <div>
-              <label>Mật khẩu mới</label>
-              <input id="f-pass" type="password" autocomplete="new-password" />
-              <p class="hint">
-                8-64 ký tự, chỉ gồm chữ và số, có ít nhất 1 chữ và 1 số.
-              </p>
-            </div>
-            <button class="btn" id="btn-reset">Đặt lại mật khẩu</button>
-            <button class="btn link" id="btn-to-login">
-              Quay lại đăng nhập
-            </button>
-          </div>
-
-          <!-- Đăng ký -->
-          <div id="tab-register" class="body hidden" style="padding: 0">
-            <div>
-              <label>Tên đăng nhập</label
-              ><input id="r-user" autocomplete="username" />
-              <p class="hint">
-                4-32 ký tự, chỉ gồm chữ và số, không có ký tự đặc biệt.
-              </p>
-            </div>
-            <div>
-              <label>Địa chỉ Gmail</label
-              ><input
-                id="r-email"
-                type="email"
-                placeholder="ten@gmail.com"
-                autocomplete="email"
-              />
-            </div>
-            <div>
-              <label>Mật khẩu</label
-              ><input id="r-pass" type="password" autocomplete="new-password" />
-              <p class="hint">
-                8-64 ký tự, chỉ gồm chữ và số, có ít nhất 1 chữ và 1 số.
-              </p>
-            </div>
-            <button class="btn" id="btn-register">Tạo tài khoản</button>
-          </div>
-
-          <!-- Xác minh OTP -->
-          <div id="tab-verify" class="body hidden" style="padding: 0">
-            <div>
-              <label>Địa chỉ Gmail</label
-              ><input id="v-email" type="email" placeholder="ten@gmail.com" />
-            </div>
-            <div>
-              <label>Mã gồm 6 chữ số</label
-              ><input
-                id="v-otp"
-                class="otp"
-                maxlength="6"
-                inputmode="numeric"
-                autocomplete="one-time-code"
-              />
-            </div>
-            <button class="btn" id="btn-verify">Xác minh tài khoản</button>
-            <button class="btn link" id="btn-resend">Gửi mã mới</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ================= Đã đăng nhập ================= -->
-      <div id="member" class="body hidden">
-        <div class="who">
-          <div>
-            <h2 id="m-name"></h2>
-            <p id="m-email"></p>
-          </div>
-          <span id="m-role" class="badge"></span>
-        </div>
-        <div class="caps">
-          <h3 id="m-caps-title"></h3>
-          <ul id="m-caps"></ul>
-        </div>
-        <div id="m-info" class="msg ok"></div>
-        <button class="btn secondary" id="btn-logout">Đăng xuất</button>
-      </div>
+  <!-- ================= Chưa đăng nhập ================= -->
+  <div id="guest">
+    <div class="tabs">
+      <button data-tab="login" class="active">Đăng nhập</button>
+      <button data-tab="register">Tạo tài khoản</button>
+      <button data-tab="verify">Nhập mã OTP</button>
     </div>
 
-    <script>
-      // Khi trang được phục vụ bởi chính backend (python authentication.py) thì gọi cùng địa chỉ,
-      // nên mở bằng localhost hay 127.0.0.1 đều chạy. Nếu mở từ nơi khác thì trỏ tới localhost:8000.
-      const API_URL = location.port === "8000" ? "" : "http://localhost:8000";
+    <div class="body">
+      <div id="error" class="msg error"></div>
+      <div id="info" class="msg ok"></div>
 
-      const ALNUM = /^[A-Za-z0-9]+$/;
-      const GMAIL = /^[A-Za-z0-9._%+-]+@gmail\.com$/i;
-      const $ = (id) => document.getElementById(id);
+      <!-- Đăng nhập -->
+      <div id="tab-login" class="body" style="padding:0">
+        <div><label>Tên đăng nhập</label><input id="l-user" autocomplete="username"></div>
+        <div><label>Mật khẩu</label><input id="l-pass" type="password" autocomplete="current-password"></div>
+        <button class="btn" id="btn-login">Đăng nhập</button>
+        <button class="btn link" id="btn-to-forgot">Quên mật khẩu?</button>
+      </div>
 
-      let cooldown = 0,
-        cooldownTimer = null;
+      <!-- Quên mật khẩu -->
+      <div id="tab-forgot" class="body hidden" style="padding:0">
+        <div>
+          <label>Địa chỉ Gmail của tài khoản</label>
+          <input id="f-email" type="email" placeholder="ten@gmail.com" autocomplete="email">
+        </div>
+        <button class="btn secondary" id="btn-forgot-send">Gửi mã đặt lại mật khẩu</button>
+        <div>
+          <label>Mã gồm 6 chữ số</label>
+          <input id="f-otp" class="otp" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+        </div>
+        <div>
+          <label>Mật khẩu mới</label>
+          <input id="f-pass" type="password" autocomplete="new-password">
+          <p class="hint">8-64 ký tự, chỉ gồm chữ và số, có ít nhất 1 chữ và 1 số.</p>
+        </div>
+        <button class="btn" id="btn-reset">Đặt lại mật khẩu</button>
+        <button class="btn link" id="btn-to-login">Quay lại đăng nhập</button>
+      </div>
 
-      // ---------- tiện ích ----------
-      function show(el, text) {
-        el.textContent = text;
-        el.classList.add("show");
-      }
-      function hide(el) {
-        el.textContent = "";
-        el.classList.remove("show");
-      }
-      function clearMessages() {
-        hide($("error"));
-        hide($("info"));
-      }
-      function showError(t) {
-        hide($("info"));
-        show($("error"), t);
-      }
-      function showInfo(t) {
-        hide($("error"));
-        show($("info"), t);
-      }
+      <!-- Đăng ký -->
+      <div id="tab-register" class="body hidden" style="padding:0">
+        <div>
+          <label>Tên đăng nhập</label><input id="r-user" autocomplete="username">
+          <p class="hint">4-32 ký tự, chỉ gồm chữ và số, không có ký tự đặc biệt.</p>
+        </div>
+        <div>
+          <label>Địa chỉ Gmail</label><input id="r-email" type="email" placeholder="ten@gmail.com" autocomplete="email">
+        </div>
+        <div>
+          <label>Mật khẩu</label><input id="r-pass" type="password" autocomplete="new-password">
+          <p class="hint">8-64 ký tự, chỉ gồm chữ và số, có ít nhất 1 chữ và 1 số.</p>
+        </div>
+        <button class="btn" id="btn-register">Tạo tài khoản</button>
+      </div>
 
-      async function api(path, method, body) {
-        const res = await fetch(API_URL + path, {
-          method,
-          credentials: "include", // gửi / nhận cookie phiên đăng nhập
-          headers: { "Content-Type": "application/json" },
-          body: body ? JSON.stringify(body) : undefined,
-        });
-        let data = {};
-        try {
-          data = await res.json();
-        } catch (e) {}
-        return { ok: res.ok, status: res.status, data };
-      }
+      <!-- Xác minh OTP -->
+      <div id="tab-verify" class="body hidden" style="padding:0">
+        <div><label>Địa chỉ Gmail</label><input id="v-email" type="email" placeholder="ten@gmail.com"></div>
+        <div><label>Mã gồm 6 chữ số</label><input id="v-otp" class="otp" maxlength="6" inputmode="numeric" autocomplete="one-time-code"></div>
+        <button class="btn" id="btn-verify">Xác minh tài khoản</button>
+        <button class="btn link" id="btn-resend">Gửi mã mới</button>
+      </div>
+    </div>
+  </div>
 
-      function errText(r) {
-        if (typeof r.data.detail === "string") return r.data.detail;
-        if (Array.isArray(r.data.detail))
-          return "Vui lòng kiểm tra lại các ô nhập.";
-        return "Yêu cầu thất bại (" + r.status + ")";
-      }
+  <!-- ================= Đã đăng nhập ================= -->
+  <div id="member" class="body hidden">
+    <div class="who">
+      <div><h2 id="m-name"></h2><p id="m-email"></p></div>
+      <span id="m-role" class="badge"></span>
+    </div>
+    <div class="caps">
+      <h3 id="m-caps-title"></h3>
+      <ul id="m-caps"></ul>
+    </div>
+    <div id="m-info" class="msg ok"></div>
+    <button class="btn secondary" id="btn-logout">Đăng xuất</button>
+  </div>
 
-      async function guarded(btn, fn) {
-        btn.disabled = true;
-        try {
-          await fn();
-        } catch (e) {
-          showError("Không kết nối được tới máy chủ.");
-        } finally {
-          btn.disabled =
-            (btn.id === "btn-resend" && cooldown > 0) ||
-            (btn.id === "btn-forgot-send" && fCooldown > 0);
-        }
-      }
+</div>
 
-      // ---------- chuyển tab ----------
-      function switchTab(name) {
-        document
-          .querySelectorAll(".tabs button")
-          .forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-        ["login", "register", "verify", "forgot"].forEach((t) =>
-          $("tab-" + t).classList.toggle("hidden", t !== name),
-        );
-        clearMessages();
-      }
-      document
-        .querySelectorAll(".tabs button")
-        .forEach((b) =>
-          b.addEventListener("click", () => switchTab(b.dataset.tab)),
-        );
+<script>
+  // Khi trang được phục vụ bởi chính backend (python authentication.py) thì gọi cùng địa chỉ,
+  // nên mở bằng localhost hay 127.0.0.1 đều chạy. Nếu mở từ nơi khác thì trỏ tới localhost:8000.
+  const API_URL = location.port === "8000" ? "" : "http://localhost:8000";
 
-      // ---------- đếm ngược gửi lại mã ----------
-      function startCooldown(sec) {
-        cooldown = sec;
-        clearInterval(cooldownTimer);
-        renderCooldown();
-        cooldownTimer = setInterval(() => {
-          cooldown--;
-          renderCooldown();
-          if (cooldown <= 0) clearInterval(cooldownTimer);
-        }, 1000);
-      }
-      function renderCooldown() {
-        const b = $("btn-resend");
-        b.disabled = cooldown > 0;
-        b.textContent =
-          cooldown > 0 ? "Gửi mã mới sau " + cooldown + " giây" : "Gửi mã mới";
-      }
+  const ALNUM = /^[A-Za-z0-9]+$/;
+  const GMAIL = /^[A-Za-z0-9._%+-]+@gmail\.com$/i;
+  const $ = (id) => document.getElementById(id);
 
-      // ---------- giao diện đã / chưa đăng nhập ----------
-      function renderMember(user, caps) {
-        $("guest").classList.add("hidden");
-        $("member").classList.remove("hidden");
-        $("m-name").textContent = user.username;
-        $("m-email").textContent = user.email;
-        const badge = $("m-role");
-        badge.textContent = user.role;
-        badge.className = "badge " + user.role;
-        $("m-caps-title").textContent =
-          "Quyền của vai trò này (" + caps.length + ")";
-        const ul = $("m-caps");
-        ul.innerHTML = "";
-        caps.forEach((c) => {
-          const li = document.createElement("li");
-          li.textContent = c.replace(/_/g, " ");
-          ul.appendChild(li);
-        });
-      }
-      function renderGuest() {
-        $("member").classList.add("hidden");
-        $("guest").classList.remove("hidden");
-      }
+  let cooldown = 0, cooldownTimer = null;
 
-      async function loadMe() {
-        try {
-          const r = await api("/auth/me", "GET");
-          if (r.ok) renderMember(r.data.user, r.data.capabilities);
-          else renderGuest();
-        } catch (e) {
-          renderGuest();
-        }
-      }
+  // ---------- tiện ích ----------
+  function show(el, text) { el.textContent = text; el.classList.add("show"); }
+  function hide(el) { el.textContent = ""; el.classList.remove("show"); }
+  function clearMessages() { hide($("error")); hide($("info")); }
+  function showError(t) { hide($("info")); show($("error"), t); }
+  function showInfo(t) { hide($("error")); show($("info"), t); }
 
-      // ---------- hành động ----------
-      $("btn-login").addEventListener("click", () =>
-        guarded($("btn-login"), async () => {
-          clearMessages();
-          const username = $("l-user").value,
-            password = $("l-pass").value;
-          if (!username || !password)
-            return showError("Nhập tên đăng nhập và mật khẩu.");
-          const r = await api("/auth/login", "POST", { username, password });
-          if (r.ok) {
-            $("l-pass").value = "";
-            await loadMe();
-          } else {
-            showError(errText(r));
-            if (r.status === 403) switchTabKeepMsg("verify");
-          }
-        }),
-      );
+  // Không có token, cookie hay session: tên đăng nhập + mật khẩu được giữ trong bộ nhớ của trang
+  // và gửi kèm MỖI yêu cầu (Authorization: Basic ...). Tải lại trang (F5) sẽ mất đăng nhập.
+  let creds = null; // { username, password }
 
-      function switchTabKeepMsg(name) {
-        const msg = $("error").textContent;
-        switchTab(name);
-        showError(msg);
-      }
+  async function api(path, method, body) {
+    const headers = { "Content-Type": "application/json" };
+    if (creds) headers["Authorization"] = "Basic " + btoa(creds.username + ":" + creds.password);
+    const res = await fetch(API_URL + path, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+    return { ok: res.ok, status: res.status, data };
+  }
 
-      $("btn-register").addEventListener("click", () =>
-        guarded($("btn-register"), async () => {
-          clearMessages();
-          const username = $("r-user").value,
-            email = $("r-email").value.trim(),
-            password = $("r-pass").value;
-          if (
-            !ALNUM.test(username) ||
-            username.length < 4 ||
-            username.length > 32
-          )
-            return showError(
-              "Tên đăng nhập: 4-32 chữ và số, không có ký tự đặc biệt.",
-            );
-          if (
-            !ALNUM.test(password) ||
-            password.length < 8 ||
-            password.length > 64 ||
-            !/[A-Za-z]/.test(password) ||
-            !/[0-9]/.test(password)
-          )
-            return showError(
-              "Mật khẩu: 8-64 chữ và số, có ít nhất 1 chữ và 1 số.",
-            );
-          if (!GMAIL.test(email))
-            return showError("Hãy dùng địa chỉ Gmail (ten@gmail.com).");
+  function errText(r) {
+    if (typeof r.data.detail === "string") return r.data.detail;
+    if (Array.isArray(r.data.detail)) return "Vui lòng kiểm tra lại các ô nhập.";
+    return "Yêu cầu thất bại (" + r.status + ")";
+  }
 
-          const r = await api("/auth/register", "POST", {
-            username,
-            email,
-            password,
-          });
-          if (r.ok) {
-            $("r-pass").value = "";
-            $("v-email").value = email;
-            switchTab("verify");
-            startCooldown(60);
-            showInfo(
-              "Đã gửi mã 6 chữ số tới Gmail của bạn. Nhập mã bên dưới để kích hoạt tài khoản.",
-            );
-          } else showError(errText(r));
-        }),
-      );
+  async function guarded(btn, fn) {
+    btn.disabled = true;
+    try { await fn(); }
+    catch (e) { showError("Không kết nối được tới máy chủ."); }
+    finally { btn.disabled = (btn.id === "btn-resend" && cooldown > 0) || (btn.id === "btn-forgot-send" && fCooldown > 0); }
+  }
 
-      $("btn-verify").addEventListener("click", () =>
-        guarded($("btn-verify"), async () => {
-          clearMessages();
-          const email = $("v-email").value.trim(),
-            otp = $("v-otp").value;
-          if (!GMAIL.test(email))
-            return showError("Nhập đúng Gmail bạn đã đăng ký.");
-          if (!/^[0-9]{6}$/.test(otp))
-            return showError("Mã gồm đúng 6 chữ số.");
-          const r = await api("/auth/verify-otp", "POST", { email, otp });
-          if (r.ok) {
-            $("v-otp").value = "";
-            switchTab("login");
-            showInfo("Tài khoản đã được xác minh. Bạn có thể đăng nhập.");
-          } else showError(errText(r));
-        }),
-      );
+  // ---------- chuyển tab ----------
+  function switchTab(name) {
+    document.querySelectorAll(".tabs button").forEach((b) =>
+      b.classList.toggle("active", b.dataset.tab === name));
+    ["login", "register", "verify", "forgot"].forEach((t) =>
+      $("tab-" + t).classList.toggle("hidden", t !== name));
+    clearMessages();
+  }
+  document.querySelectorAll(".tabs button").forEach((b) =>
+    b.addEventListener("click", () => switchTab(b.dataset.tab)));
 
-      $("btn-resend").addEventListener("click", () =>
-        guarded($("btn-resend"), async () => {
-          clearMessages();
-          const email = $("v-email").value.trim();
-          if (!GMAIL.test(email)) return showError("Nhập Gmail của bạn trước.");
-          const r = await api("/auth/resend-otp", "POST", { email });
-          if (r.ok) {
-            startCooldown(60);
-            showInfo("Nếu tài khoản đang chờ xác minh, mã mới đã được gửi.");
-          } else showError(errText(r));
-        }),
-      );
-
-      $("btn-logout").addEventListener("click", () =>
-        guarded($("btn-logout"), async () => {
-          await api("/auth/logout", "POST");
-          renderGuest();
-          switchTab("login");
-          showInfo("Bạn đã đăng xuất.");
-        }),
-      );
-
-      // ---------- quên mật khẩu ----------
-      let fCooldown = 0,
-        fTimer = null;
-      function renderForgotCooldown() {
-        const b = $("btn-forgot-send");
-        b.disabled = fCooldown > 0;
-        b.textContent =
-          fCooldown > 0
-            ? "Gửi lại mã sau " + fCooldown + " giây"
-            : "Gửi mã đặt lại mật khẩu";
-      }
-      function startForgotCooldown(sec) {
-        fCooldown = sec;
-        clearInterval(fTimer);
-        renderForgotCooldown();
-        fTimer = setInterval(() => {
-          fCooldown--;
-          renderForgotCooldown();
-          if (fCooldown <= 0) clearInterval(fTimer);
-        }, 1000);
-      }
-
-      $("btn-to-forgot").addEventListener("click", () => switchTab("forgot"));
-      $("btn-to-login").addEventListener("click", () => switchTab("login"));
-
-      // Gửi mã (bấm lại sau khi hết đếm ngược = gửi lại)
-      $("btn-forgot-send").addEventListener("click", () =>
-        guarded($("btn-forgot-send"), async () => {
-          clearMessages();
-          const email = $("f-email").value.trim();
-          if (!GMAIL.test(email))
-            return showError("Hãy nhập địa chỉ Gmail của tài khoản.");
-          const r = await api("/auth/forgot-password", "POST", { email });
-          if (r.ok) {
-            startForgotCooldown(60);
-            showInfo(
-              "Nếu Gmail này thuộc một tài khoản đã xác minh, mã đã được gửi. Nhập mã và mật khẩu mới bên dưới.",
-            );
-          } else showError(errText(r));
-        }),
-      );
-
-      $("btn-reset").addEventListener("click", () =>
-        guarded($("btn-reset"), async () => {
-          clearMessages();
-          const email = $("f-email").value.trim(),
-            otp = $("f-otp").value,
-            new_password = $("f-pass").value;
-          if (!GMAIL.test(email))
-            return showError("Hãy nhập địa chỉ Gmail của tài khoản.");
-          if (!/^[0-9]{6}$/.test(otp))
-            return showError("Mã gồm đúng 6 chữ số.");
-          if (
-            !ALNUM.test(new_password) ||
-            new_password.length < 8 ||
-            new_password.length > 64 ||
-            !/[A-Za-z]/.test(new_password) ||
-            !/[0-9]/.test(new_password)
-          )
-            return showError(
-              "Mật khẩu mới: 8-64 chữ và số, có ít nhất 1 chữ và 1 số.",
-            );
-          const r = await api("/auth/reset-password", "POST", {
-            email,
-            otp,
-            new_password,
-          });
-          if (r.ok) {
-            $("f-otp").value = "";
-            $("f-pass").value = "";
-            switchTab("login");
-            showInfo("Đã đổi mật khẩu. Hãy đăng nhập bằng mật khẩu mới.");
-          } else showError(errText(r));
-        }),
-      );
-
-      // Nhấn Enter để gửi
-      [
-        ["l-user", "btn-login"],
-        ["l-pass", "btn-login"],
-        ["r-pass", "btn-register"],
-        ["v-otp", "btn-verify"],
-        ["f-pass", "btn-reset"],
-      ].forEach(([input, btn]) =>
-        $(input).addEventListener("keydown", (e) => {
-          if (e.key === "Enter") $(btn).click();
-        }),
-      );
-      ["v-otp", "f-otp"].forEach((id) =>
-        $(id).addEventListener("input", (e) => {
-          e.target.value = e.target.value.replace(/\D/g, "");
-        }),
-      );
-
+  // ---------- đếm ngược gửi lại mã ----------
+  function startCooldown(sec) {
+    cooldown = sec;
+    clearInterval(cooldownTimer);
+    renderCooldown();
+    cooldownTimer = setInterval(() => {
+      cooldown--;
       renderCooldown();
-      $("btn-resend").disabled = false;
-      loadMe(); // F5 vẫn giữ đăng nhập
-    </script>
-  </body>
+      if (cooldown <= 0) clearInterval(cooldownTimer);
+    }, 1000);
+  }
+  function renderCooldown() {
+    const b = $("btn-resend");
+    b.disabled = cooldown > 0;
+    b.textContent = cooldown > 0 ? "Gửi mã mới sau " + cooldown + " giây" : "Gửi mã mới";
+  }
+
+  // ---------- giao diện đã / chưa đăng nhập ----------
+  function renderMember(user, caps) {
+    $("guest").classList.add("hidden");
+    $("member").classList.remove("hidden");
+    $("m-name").textContent = user.username;
+    $("m-email").textContent = user.email;
+    const badge = $("m-role");
+    badge.textContent = user.role;
+    badge.className = "badge " + user.role;
+    $("m-caps-title").textContent = "Quyền của vai trò này (" + caps.length + ")";
+    const ul = $("m-caps");
+    ul.innerHTML = "";
+    caps.forEach((c) => {
+      const li = document.createElement("li");
+      li.textContent = c.replace(/_/g, " ");
+      ul.appendChild(li);
+    });
+  }
+  function renderGuest() {
+    $("member").classList.add("hidden");
+    $("guest").classList.remove("hidden");
+  }
+
+  async function loadMe() {
+    if (!creds) return renderGuest();
+    try {
+      const r = await api("/auth/me", "GET");
+      if (r.ok) renderMember(r.data.user, r.data.capabilities);
+      else { creds = null; renderGuest(); }
+    } catch (e) { creds = null; renderGuest(); }
+  }
+
+  // ---------- hành động ----------
+  $("btn-login").addEventListener("click", () => guarded($("btn-login"), async () => {
+    clearMessages();
+    const username = $("l-user").value, password = $("l-pass").value;
+    if (!username || !password) return showError("Nhập tên đăng nhập và mật khẩu.");
+    const r = await api("/auth/login", "POST", { username, password });
+    if (r.ok) { creds = { username, password }; $("l-pass").value = ""; await loadMe(); }
+    else {
+      showError(errText(r));
+      if (r.status === 403) switchTabKeepMsg("verify");
+    }
+  }));
+
+  function switchTabKeepMsg(name) {
+    const msg = $("error").textContent;
+    switchTab(name);
+    showError(msg);
+  }
+
+  $("btn-register").addEventListener("click", () => guarded($("btn-register"), async () => {
+    clearMessages();
+    const username = $("r-user").value, email = $("r-email").value.trim(), password = $("r-pass").value;
+    if (!ALNUM.test(username) || username.length < 4 || username.length > 32)
+      return showError("Tên đăng nhập: 4-32 chữ và số, không có ký tự đặc biệt.");
+    if (!ALNUM.test(password) || password.length < 8 || password.length > 64 ||
+        !/[A-Za-z]/.test(password) || !/[0-9]/.test(password))
+      return showError("Mật khẩu: 8-64 chữ và số, có ít nhất 1 chữ và 1 số.");
+    if (!GMAIL.test(email)) return showError("Hãy dùng địa chỉ Gmail (ten@gmail.com).");
+
+    const r = await api("/auth/register", "POST", { username, email, password });
+    if (r.ok) {
+      $("r-pass").value = "";
+      $("v-email").value = email;
+      switchTab("verify");
+      startCooldown(60);
+      showInfo("Đã gửi mã 6 chữ số tới Gmail của bạn. Nhập mã bên dưới để kích hoạt tài khoản.");
+    } else showError(errText(r));
+  }));
+
+  $("btn-verify").addEventListener("click", () => guarded($("btn-verify"), async () => {
+    clearMessages();
+    const email = $("v-email").value.trim(), otp = $("v-otp").value;
+    if (!GMAIL.test(email)) return showError("Nhập đúng Gmail bạn đã đăng ký.");
+    if (!/^[0-9]{6}$/.test(otp)) return showError("Mã gồm đúng 6 chữ số.");
+    const r = await api("/auth/verify-otp", "POST", { email, otp });
+    if (r.ok) {
+      $("v-otp").value = "";
+      switchTab("login");
+      showInfo("Tài khoản đã được xác minh. Bạn có thể đăng nhập.");
+    } else showError(errText(r));
+  }));
+
+  $("btn-resend").addEventListener("click", () => guarded($("btn-resend"), async () => {
+    clearMessages();
+    const email = $("v-email").value.trim();
+    if (!GMAIL.test(email)) return showError("Nhập Gmail của bạn trước.");
+    const r = await api("/auth/resend-otp", "POST", { email });
+    if (r.ok) { startCooldown(60); showInfo("Nếu tài khoản đang chờ xác minh, mã mới đã được gửi."); }
+    else showError(errText(r));
+  }));
+
+  $("btn-logout").addEventListener("click", () => guarded($("btn-logout"), async () => {
+    await api("/auth/logout", "POST");
+    creds = null;
+    renderGuest();
+    switchTab("login");
+    showInfo("Bạn đã đăng xuất.");
+  }));
+
+  // ---------- quên mật khẩu ----------
+  let fCooldown = 0, fTimer = null;
+  function renderForgotCooldown() {
+    const b = $("btn-forgot-send");
+    b.disabled = fCooldown > 0;
+    b.textContent = fCooldown > 0 ? "Gửi lại mã sau " + fCooldown + " giây" : "Gửi mã đặt lại mật khẩu";
+  }
+  function startForgotCooldown(sec) {
+    fCooldown = sec;
+    clearInterval(fTimer);
+    renderForgotCooldown();
+    fTimer = setInterval(() => {
+      fCooldown--;
+      renderForgotCooldown();
+      if (fCooldown <= 0) clearInterval(fTimer);
+    }, 1000);
+  }
+
+  $("btn-to-forgot").addEventListener("click", () => switchTab("forgot"));
+  $("btn-to-login").addEventListener("click", () => switchTab("login"));
+
+  // Gửi mã (bấm lại sau khi hết đếm ngược = gửi lại)
+  $("btn-forgot-send").addEventListener("click", () => guarded($("btn-forgot-send"), async () => {
+    clearMessages();
+    const email = $("f-email").value.trim();
+    if (!GMAIL.test(email)) return showError("Hãy nhập địa chỉ Gmail của tài khoản.");
+    const r = await api("/auth/forgot-password", "POST", { email });
+    if (r.ok) {
+      startForgotCooldown(60);
+      showInfo("Nếu Gmail này thuộc một tài khoản đã xác minh, mã đã được gửi. Nhập mã và mật khẩu mới bên dưới.");
+    } else showError(errText(r));
+  }));
+
+  $("btn-reset").addEventListener("click", () => guarded($("btn-reset"), async () => {
+    clearMessages();
+    const email = $("f-email").value.trim(), otp = $("f-otp").value, new_password = $("f-pass").value;
+    if (!GMAIL.test(email)) return showError("Hãy nhập địa chỉ Gmail của tài khoản.");
+    if (!/^[0-9]{6}$/.test(otp)) return showError("Mã gồm đúng 6 chữ số.");
+    if (!ALNUM.test(new_password) || new_password.length < 8 || new_password.length > 64 ||
+        !/[A-Za-z]/.test(new_password) || !/[0-9]/.test(new_password))
+      return showError("Mật khẩu mới: 8-64 chữ và số, có ít nhất 1 chữ và 1 số.");
+    const r = await api("/auth/reset-password", "POST", { email, otp, new_password });
+    if (r.ok) {
+      $("f-otp").value = ""; $("f-pass").value = "";
+      switchTab("login");
+      showInfo("Đã đổi mật khẩu. Hãy đăng nhập bằng mật khẩu mới.");
+    } else showError(errText(r));
+  }));
+
+  // Nhấn Enter để gửi
+  [["l-user","btn-login"],["l-pass","btn-login"],["r-pass","btn-register"],["v-otp","btn-verify"],["f-pass","btn-reset"]]
+    .forEach(([input, btn]) => $(input).addEventListener("keydown", (e) => {
+      if (e.key === "Enter") $(btn).click();
+    }));
+  ["v-otp", "f-otp"].forEach((id) => $(id).addEventListener("input", (e) => {
+    e.target.value = e.target.value.replace(/\D/g, "");
+  }));
+
+  renderCooldown();
+  $("btn-resend").disabled = false;
+  loadMe(); // chưa đăng nhập -> hiện màn hình đăng nhập
+</script>
+</body>
 </html>

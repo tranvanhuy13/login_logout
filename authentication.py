@@ -6,19 +6,21 @@ Flow
 1. POST /auth/register     -> account is created with status = 0 (unverified), role = viewer,
                               a 6-digit OTP is e-mailed to the user's Gmail address.
 2. POST /auth/verify-otp   -> correct OTP sets status = 1. Only then can the account log in.
-3. POST /auth/login        -> returns a session token (also set as an HttpOnly cookie).
-4. POST /auth/logout       -> the session is deleted on the server (the token stops working).
+3. POST /auth/login        -> checks username + password and returns the user and role.
+4. POST /auth/logout       -> nothing is stored on the server; the client just forgets the login.
 5. Forgot password:
    POST /auth/forgot-password -> e-mails a 6-digit reset code to a verified account's Gmail
                                  (call it again to resend; 60 s cooldown)
    POST /auth/reset-password  -> correct code + new password -> password changed and
-                                 every existing session of that user is logged out
+                                 the old password stops working immediately
 
 Rules
 -----
 * username and password may contain ONLY letters and digits (A-Z, a-z, 0-9).
 * email must be a @gmail.com address (the OTP is sent there).
-* Passwords are stored as salted PBKDF2-SHA256 hashes, OTPs and session tokens as hashes.
+* Passwords are stored as salted PBKDF2-SHA256 hashes, OTPs as hashes.
+* NO tokens, NO cookies, NO sessions: every protected request carries the credentials in an
+  'Authorization: Basic base64(username:password)' header and they are checked each time.
 
 Environment variables (.env)
 ----------------------------
@@ -27,7 +29,6 @@ GMAIL_APP_PASSWORD=abcd efgh ijkl mnop   # Google "App password" (needs 2-step v
 ADMIN_USERNAME=admin1                    # optional: first admin, created at startup if none exists
 ADMIN_PASSWORD=ChangeMe12345
 ADMIN_EMAIL=owner@gmail.com
-AUTH_COOKIE_SECURE=false                 # set true when served over HTTPS
 AUTH_DEV_MODE=false                      # true = print OTP in the server log instead of e-mailing
 
 Authorization (roles / capabilities) lives in authorization.py.
@@ -41,6 +42,8 @@ Run it on its own (test mode)
 * If Gmail is not configured, DEV MODE is switched on and the OTP is printed in this terminal.
 * If ADMIN_* are not set, a TEST admin is created: admin1 / Admin12345  (change it for real use!)
 """
+import base64
+import binascii
 import hashlib
 import hmac
 import logging
@@ -57,7 +60,7 @@ from datetime import datetime
 from email.message import EmailMessage
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -74,8 +77,6 @@ STATUS_UNVERIFIED = 0
 STATUS_ACTIVE = 1
 DEFAULT_ROLE = "viewer"
 
-SESSION_COOKIE = "fg_session"
-SESSION_TTL_SECONDS = 12 * 3600
 OTP_TTL_SECONDS = 10 * 60
 OTP_RESEND_COOLDOWN_SECONDS = 60
 OTP_MAX_ATTEMPTS = 5
@@ -83,7 +84,10 @@ LOGIN_MAX_FAILURES = 5
 LOGIN_LOCK_SECONDS = 5 * 60
 PBKDF2_ITERATIONS = 600_000
 
-COOKIE_SECURE = os.getenv("AUTH_COOKIE_SECURE", "false").lower() == "true"
+# Hashing a password takes ~0.2 s on purpose. A correct password is remembered in memory for this
+# many seconds so one page load (several requests) does not pay that cost every time.
+# 0 = verify the password on every single request.
+AUTH_CACHE_SECONDS = int(os.getenv("AUTH_CACHE_SECONDS", "300"))
 DEV_MODE = os.getenv("AUTH_DEV_MODE", "false").lower() == "true"
 
 # --------------------------------------------------------------------------- database
@@ -112,13 +116,6 @@ CREATE TABLE IF NOT EXISTS password_resets (
     expires_at REAL NOT NULL,
     attempts   INTEGER NOT NULL DEFAULT 0,
     last_sent  REAL NOT NULL
-);
-CREATE TABLE IF NOT EXISTS sessions (
-    token_hash TEXT PRIMARY KEY,
-    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at REAL NOT NULL,
-    expires_at REAL NOT NULL,
-    ip         TEXT
 );
 CREATE TABLE IF NOT EXISTS audit_log (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -299,39 +296,108 @@ class _LoginThrottle:
 _throttle = _LoginThrottle()
 
 
-# --------------------------------------------------------------------------- sessions
-def _token_hash(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
+# --------------------------------------------------------------------------- credentials
+_verified = {}              # cache key -> expiry time (see AUTH_CACHE_SECONDS)
+_verified_lock = threading.Lock()
 
 
-def _extract_token(conn: HTTPConnection):
-    """Token from 'Authorization: Bearer ...' or from the session cookie.
+def _cache_key(password_hash: str, password: str) -> str:
+    # includes the stored hash, so changing the password invalidates the entry automatically
+    return hashlib.sha256(f"{password_hash}|{password}".encode()).hexdigest()
 
-    The cookie makes <img src="/video_feed/1"> and WebSocket connections work,
-    because browsers cannot attach custom headers to those.
+
+def _cache_has(key: str) -> bool:
+    if AUTH_CACHE_SECONDS <= 0:
+        return False
+    with _verified_lock:
+        exp = _verified.get(key)
+        if exp is None:
+            return False
+        if exp < time.time():
+            _verified.pop(key, None)
+            return False
+        return True
+
+
+def _cache_add(key: str):
+    if AUTH_CACHE_SECONDS <= 0:
+        return
+    now = time.time()
+    with _verified_lock:
+        if len(_verified) > 1000:
+            for k in [k for k, e in _verified.items() if e < now]:
+                _verified.pop(k, None)
+            if len(_verified) > 1000:
+                _verified.clear()
+        _verified[key] = now + AUTH_CACHE_SECONDS
+
+
+def _cache_drop(key: str):
+    with _verified_lock:
+        _verified.pop(key, None)
+
+
+def check_credentials(username: str, password: str, ip=None) -> sqlite3.Row:
+    """Return the user row if username + password are right and the account is verified.
+
+    Raises 401 (wrong credentials), 403 (not verified yet) or 429 (too many failures).
     """
+    key = f"{ip}|{username.lower()}"
+    _throttle.check(key)
+
+    row = None
+    # Anything with special symbols can never be a real account -> same generic error
+    if _ALNUM.fullmatch(username) and len(username) <= 32:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT id, username, email, password_hash, role, status FROM users WHERE username = ?",
+                (username,),
+            ).fetchone()
+
+    password = password[:128]
+    if row is not None and _cache_has(_cache_key(row["password_hash"], password)):
+        ok = True
+    else:
+        ok = verify_password(password, row["password_hash"] if row else _DUMMY_HASH)
+        if ok and row is not None:
+            _cache_add(_cache_key(row["password_hash"], password))
+
+    if row is None or not ok:
+        _throttle.fail(key)
+        audit("login_failed", username[:32], None, ip)
+        raise HTTPException(status_code=401, detail="Invalid username or password.")
+
+    if row["status"] != STATUS_ACTIVE:
+        raise HTTPException(status_code=403,
+                            detail="Account is not verified yet. Enter the OTP sent to your Gmail.")
+
+    _throttle.clear(key)
+    return row
+
+
+def _basic_credentials(conn: HTTPConnection):
+    """(username, password) from 'Authorization: Basic ...', or None."""
     auth = conn.headers.get("authorization", "")
-    if auth.lower().startswith("bearer "):
-        return auth[7:].strip()
-    return conn.cookies.get(SESSION_COOKIE)
+    if not auth.lower().startswith("basic "):
+        return None
+    try:
+        decoded = base64.b64decode(auth[6:].strip(), validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        return None
+    username, sep, password = decoded.partition(":")
+    return (username, password) if sep else None
 
 
 def get_current_user(request: HTTPConnection) -> dict:
-    """FastAPI dependency: the logged-in, verified user (works for HTTP and WebSocket)."""
-    token = _extract_token(request)
-    if not token:
+    """FastAPI dependency: the user whose credentials came with this request.
+
+    The role is read from the database on every request, so a role change applies at once.
+    """
+    creds = _basic_credentials(request)
+    if creds is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    with get_db() as db:
-        row = db.execute(
-            "SELECT u.id, u.username, u.email, u.role, u.status, s.expires_at "
-            "FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?",
-            (_token_hash(token),),
-        ).fetchone()
-
-    if row is None or row["expires_at"] < time.time() or row["status"] != STATUS_ACTIVE:
-        raise HTTPException(status_code=401, detail="Session expired or invalid")
-
+    ip = request.client.host if request.client else None
+    row = check_credentials(creds[0], creds[1], ip)
     return {"id": row["id"], "username": row["username"], "email": row["email"], "role": row["role"]}
 
 
@@ -340,6 +406,7 @@ def init_auth_db():
     """Create tables and, if no admin exists yet, seed one from ADMIN_* env variables."""
     with get_db() as conn:
         conn.executescript(SCHEMA)
+        conn.execute("DROP TABLE IF EXISTS sessions")  # left over from the old token/session version
 
     username = os.getenv("ADMIN_USERNAME")
     password = os.getenv("ADMIN_PASSWORD")
@@ -502,70 +569,29 @@ def resend_otp(body: ResendBody, request: Request):
 
 
 @router.post("/login")
-def login(body: LoginBody, request: Request, response: Response):
+def login(body: LoginBody, request: Request):
+    """Checks the credentials. Nothing is stored: the client keeps them and sends them each time."""
     ip = _ip(request)
-    key = f"{ip}|{body.username.lower()}"
-    _throttle.check(key)
-
-    invalid = HTTPException(status_code=401, detail="Invalid username or password.")
-
-    # Anything with special symbols can never be a real account -> same generic error
-    row = None
-    if _ALNUM.fullmatch(body.username) and len(body.username) <= 32:
-        with get_db() as conn:
-            row = conn.execute(
-                "SELECT id, username, password_hash, role, status FROM users WHERE username = ?",
-                (body.username,),
-            ).fetchone()
-
-    password_ok = verify_password(body.password[:128], row["password_hash"] if row else _DUMMY_HASH)
-    if row is None or not password_ok:
-        _throttle.fail(key)
-        audit("login_failed", body.username[:32], None, ip)
-        raise invalid
-
-    if row["status"] != STATUS_ACTIVE:
-        raise HTTPException(status_code=403,
-                            detail="Account is not verified yet. Enter the OTP sent to your Gmail.")
-
-    _throttle.clear(key)
-    token = secrets.token_urlsafe(32)
-    now = time.time()
-    with get_db() as conn:
-        conn.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
-        conn.execute(
-            "INSERT INTO sessions (token_hash, user_id, created_at, expires_at, ip) VALUES (?,?,?,?,?)",
-            (_token_hash(token), row["id"], now, now + SESSION_TTL_SECONDS, ip),
-        )
-
-    response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_TTL_SECONDS,
-                        httponly=True, samesite="lax", secure=COOKIE_SECURE, path="/")
+    row = check_credentials(body.username, body.password, ip)
     audit("login", row["username"], None, ip)
     return {
         "status": "ok",
-        "token": token,  # for API clients; browsers can rely on the cookie
-        "expires_in": SESSION_TTL_SECONDS,
         "user": {"id": row["id"], "username": row["username"], "role": row["role"]},
     }
 
 
 @router.post("/logout")
-def logout(request: Request, response: Response):
-    """Delete the session on the server and clear the cookie."""
-    token = _extract_token(request)
-    if token:
-        username = None
+def logout(request: Request):
+    """There is no server-side login to end. This forgets the cached check and writes the audit log."""
+    creds = _basic_credentials(request)
+    if creds is not None and _ALNUM.fullmatch(creds[0]) and len(creds[0]) <= 32:
         with get_db() as conn:
-            row = conn.execute(
-                "SELECT u.username FROM sessions s JOIN users u ON u.id = s.user_id "
-                "WHERE s.token_hash = ?", (_token_hash(token),)).fetchone()
-            if row:
-                username = row["username"]
-            conn.execute("DELETE FROM sessions WHERE token_hash = ?", (_token_hash(token),))
-        if username:
-            audit("logout", username, None, _ip(request))
-    response.delete_cookie(SESSION_COOKIE, path="/")
-    return {"status": "ok", "message": "Logged out"}
+            row = conn.execute("SELECT username, password_hash FROM users WHERE username = ?",
+                               (creds[0],)).fetchone()
+        if row is not None:
+            _cache_drop(_cache_key(row["password_hash"], creds[1][:128]))
+            audit("logout", row["username"], None, _ip(request))
+    return {"status": "ok", "message": "Logged out. Delete the stored credentials on the client."}
 
 
 # --------------------------------------------------------------------------- forgot password
@@ -615,7 +641,7 @@ def forgot_password(body: ForgotBody, request: Request):
 
 @router.post("/reset-password")
 def reset_password(body: ResetBody, request: Request):
-    """Correct code + valid new password -> password changed, all sessions of the user removed."""
+    """Correct code + valid new password -> password changed (the old one stops working at once)."""
     email = body.email.strip().lower()
     otp = body.otp.strip()
     validate_email(email)
@@ -642,7 +668,6 @@ def reset_password(body: ResetBody, request: Request):
         else:
             conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user["id"]))
             conn.execute("DELETE FROM password_resets WHERE user_id = ?", (user["id"],))
-            conn.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))  # log out everywhere
             username = user["username"]
 
     # raised after the 'with' so the attempt counter is committed, not rolled back
@@ -665,7 +690,6 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://localhost:8000",
                    "http://127.0.0.1:3000", "http://127.0.0.1:8000"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -676,7 +700,7 @@ _HTML_PAGE = os.path.join(BASE_DIR, "auth.html")
 
 @app.get("/")
 def index():
-    """Serves auth.html (same origin as the API, so cookies just work)."""
+    """Serves auth.html (same origin as the API, so no CORS is involved)."""
     if os.path.exists(_HTML_PAGE):
         return FileResponse(_HTML_PAGE)
     return {"status": "ok", "message": "Auth API is running. Put auth.html next to this file for the UI."}
