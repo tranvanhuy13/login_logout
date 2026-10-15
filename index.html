@@ -320,7 +320,12 @@
     <script>
       // Khi trang được phục vụ bởi chính backend (python main.py) thì gọi cùng địa chỉ.
       // Nếu mở trực tiếp file thì trỏ tới localhost:8000.
-      const API_URL = location.port === "8000" ? "" : "http://localhost:8000";
+      const isLocalDev =
+        location.protocol === "file:" ||
+        (["localhost", "127.0.0.1"].includes(location.hostname) &&
+          location.port !== "8000");
+
+      const API_URL = isLocalDev ? "http://localhost:8000" : "";
 
       const ALNUM = /^[A-Za-z0-9]+$/;
       const GMAIL = /^[A-Za-z0-9._%+-]+@gmail\.com$/i;
